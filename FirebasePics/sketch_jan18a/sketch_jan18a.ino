@@ -22,7 +22,8 @@ const char* password = "arv2003!";
 #define USER_PASSWORD "arv2003!"
 
 // Insert Firebase storage bucket ID e.g bucket-name.appspot.com
-#define STORAGE_BUCKET_ID "https://console.firebase.google.com/project/esp32-cam-7611b/storage/esp32-cam-7611b.appspot.com/files"
+#define STORAGE_BUCKET_ID "esp32-cam-7611b.appspot.com"
+
 // For example:
 //#define STORAGE_BUCKET_ID "esp-iot-app.appspot.com"
 
