@@ -1,6 +1,5 @@
 #include "esp_camera.h"
 #include <WiFi.h>
-#include <ESP32Firebase.h>
 
 //
 // WARNING!!! PSRAM IC required for UXGA resolution and high JPEG quality
