@@ -19,8 +19,14 @@
 #include "Arduino.h"
 
 extern String WiFiAddr;
+static camera_fb_t *last_captured_fb = NULL;
+static esp_timer_handle_t periodic_capture_timer;
 
-void WheelAct(int nLf, int nLb, int nRf, int nRb);
+// Function to capture an image
+static void capture_image(void *arg);
+
+// Function to initialize and start the timer for periodic capture
+static void start_periodic_capture_timer();
 
 typedef struct {
         size_t size; //number of values used for filtering
@@ -82,37 +88,6 @@ static size_t jpg_encode_stream(void * arg, size_t index, const void* data, size
     }
     j->len += len;
     return len;
-}
-
-static esp_err_t capture_handler(httpd_req_t *req){
-    camera_fb_t * fb = NULL;
-    esp_err_t res = ESP_OK;
-    int64_t fr_start = esp_timer_get_time();
-
-    fb = esp_camera_fb_get();
-    if (!fb) {
-        Serial.printf("Camera capture failed");
-        httpd_resp_send_500(req);
-        return ESP_FAIL;
-    }
-
-    httpd_resp_set_type(req, "image/jpeg");
-    httpd_resp_set_hdr(req, "Content-Disposition", "inline; filename=capture.jpg");
-
-    size_t fb_len = 0;
-    if(fb->format == PIXFORMAT_JPEG){
-        fb_len = fb->len;
-        res = httpd_resp_send(req, (const char *)fb->buf, fb->len);
-    } else {
-        jpg_chunking_t jchunk = {req, 0};
-        res = frame2jpg_cb(fb, 80, jpg_encode_stream, &jchunk)?ESP_OK:ESP_FAIL;
-        httpd_resp_send_chunk(req, NULL, 0);
-        fb_len = jchunk.len;
-    }
-    esp_camera_fb_return(fb);
-    int64_t fr_end = esp_timer_get_time();
-    Serial.printf("JPG: %uB %ums", (uint32_t)(fb_len), (uint32_t)((fr_end - fr_start)/1000));
-    return res;
 }
 
 static esp_err_t stream_handler(httpd_req_t *req){
@@ -300,6 +275,61 @@ static esp_err_t status_handler(httpd_req_t *req){
     return httpd_resp_send(req, json_response, strlen(json_response));
 }
 
+static esp_err_t capture_handler(httpd_req_t *req){
+    camera_fb_t * fb = NULL;
+    esp_err_t res = ESP_OK;
+    int64_t fr_start = esp_timer_get_time();
+
+    fb = esp_camera_fb_get();
+    if (!fb) {
+        Serial.printf("Camera capture failed");
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+
+    httpd_resp_set_type(req, "image/jpeg");
+    httpd_resp_set_hdr(req, "Content-Disposition", "inline; filename=capture.jpg");
+
+    size_t fb_len = 0;
+    if(fb->format == PIXFORMAT_JPEG){
+        fb_len = fb->len;
+        res = httpd_resp_send(req, (const char *)fb->buf, fb->len);
+    } else {
+        jpg_chunking_t jchunk = {req, 0};
+        res = frame2jpg_cb(fb, 80, jpg_encode_stream, &jchunk)?ESP_OK:ESP_FAIL;
+        httpd_resp_send_chunk(req, NULL, 0);
+        fb_len = jchunk.len;
+    }
+    
+    // Save the captured frame to the global variable
+    if (last_captured_fb) {
+        esp_camera_fb_return(last_captured_fb);
+        last_captured_fb = NULL;
+    }
+    last_captured_fb = fb;
+
+    int64_t fr_end = esp_timer_get_time();
+    Serial.printf("JPG: %uB %ums", (uint32_t)(fb_len), (uint32_t)((fr_end - fr_start)/1000));
+    return res;
+}
+
+// Function to capture an image
+static void capture_image(void *arg) {
+    camera_fb_t *fb = esp_camera_fb_get();
+    if (!fb) {
+        Serial.println("Camera capture failed");
+        return;
+    }
+
+    // Save the captured frame to the global variable
+    if (last_captured_fb) {
+        esp_camera_fb_return(last_captured_fb);
+        last_captured_fb = NULL;
+    }
+    last_captured_fb = fb;
+}
+
+
 static esp_err_t index_handler(httpd_req_t *req) {
     httpd_resp_set_type(req, "text/html");
     String page = "";
@@ -312,10 +342,43 @@ static esp_err_t index_handler(httpd_req_t *req) {
     page += "</style>";
     page += "<p align=center><IMG id='camera-stream' SRC='http://" + WiFiAddr + ":81/stream'></p><br/><br/>";
 
+    // Add the button to capture image
+    page += "<p align=center><button onclick='captureImage()'>Capture Image</button></p>";
+    page += "<p align=center><img id='captured-image' src='' alt='Captured Image'></p>";
+
+    // Add JavaScript for image capture
+    page += "<script>";
+    page += "function captureImage() {";
+    page += "  fetch('/capture')";
+    page += "    .then(response => response.blob())";
+    page += "    .then(blob => {";
+    page += "      const url = URL.createObjectURL(blob);";
+    page += "      document.getElementById('captured-image').src = url;";
+    page += "    })";
+    page += "    .catch(error => {";
+    page += "      console.error('Error capturing image:', error);";
+    page += "    });";
+    page += "}";
+    page += "</script>";
+
     return httpd_resp_send(req, &page[0], strlen(&page[0]));
 }
 
-void startCameraServer(){
+static void start_periodic_capture_timer() {
+    const esp_timer_create_args_t periodic_timer_args = {
+        .callback = &capture_image,
+        .arg = NULL,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "periodic_capture_timer"
+    };
+
+    esp_timer_create(&periodic_timer_args, &periodic_capture_timer);
+
+    // Set the timer to trigger every 1 second (1,000,000 microseconds)
+    esp_timer_start_periodic(periodic_capture_timer, 1000000);  // Change this line to 1000000 (1 second)
+}
+
+void startCameraServer() {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
 
     httpd_uri_t index_uri = {
@@ -346,25 +409,34 @@ void startCameraServer(){
         .user_ctx  = NULL
     };
 
-   httpd_uri_t stream_uri = {
+    httpd_uri_t stream_uri = {
         .uri       = "/stream",
         .method    = HTTP_GET,
         .handler   = stream_handler,
         .user_ctx  = NULL
     };
 
-
     ra_filter_init(&ra_filter, 20);
+
     Serial.printf("Starting web server on port: '%d'", config.server_port);
+    // Start the HTTP servers and register URI handlers
     if (httpd_start(&camera_httpd, &config) == ESP_OK) {
         httpd_register_uri_handler(camera_httpd, &index_uri);
-    }
+        httpd_register_uri_handler(camera_httpd, &status_uri);
+        httpd_register_uri_handler(camera_httpd, &cmd_uri);
+        httpd_register_uri_handler(camera_httpd, &capture_uri);
 
+        // Start the periodic capture timer
+        start_periodic_capture_timer();
+    }
     config.server_port += 1;
     config.ctrl_port += 1;
+    
     Serial.printf("Starting stream server on port: '%d'", config.server_port);
     if (httpd_start(&stream_httpd, &config) == ESP_OK) {
         httpd_register_uri_handler(stream_httpd, &stream_uri);
     }
 }
+
+
 
