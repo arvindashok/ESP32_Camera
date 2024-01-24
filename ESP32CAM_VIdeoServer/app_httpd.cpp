@@ -1,16 +1,3 @@
-// Copyright 2015-2016 Espressif Systems (Shanghai) PTE LTD
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 #include "esp_http_server.h"
 #include "esp_timer.h"
 #include "esp_camera.h"
@@ -20,13 +7,10 @@
 
 extern String WiFiAddr;
 static camera_fb_t *last_captured_fb = NULL;
-static esp_timer_handle_t periodic_capture_timer;
 
 // Function to capture an image
 static void capture_image(void *arg);
-
-// Function to initialize and start the timer for periodic capture
-static void start_periodic_capture_timer();
+static esp_err_t capture_handler(httpd_req_t *req);
 
 typedef struct {
         size_t size; //number of values used for filtering
@@ -97,6 +81,11 @@ static esp_err_t stream_handler(httpd_req_t *req){
     uint8_t * _jpg_buf = NULL;
     char * part_buf[64];
 
+    // Check if the request is for capturing an image
+    if (httpd_req_get_url_query_len(req) > 0) {
+        return capture_handler(req);
+    }
+
     static int64_t last_frame = 0;
     if(!last_frame) {
         last_frame = esp_timer_get_time();
@@ -164,125 +153,14 @@ static esp_err_t stream_handler(httpd_req_t *req){
     return res;
 }
 
-static esp_err_t cmd_handler(httpd_req_t *req){
-    char*  buf;
-    size_t buf_len;
-    char variable[32] = {0,};
-    char value[32] = {0,};
-
-    buf_len = httpd_req_get_url_query_len(req) + 1;
-    if (buf_len > 1) {
-        buf = (char*)malloc(buf_len);
-        if(!buf){
-            httpd_resp_send_500(req);
-            return ESP_FAIL;
-        }
-        if (httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK) {
-            if (httpd_query_key_value(buf, "var", variable, sizeof(variable)) == ESP_OK &&
-                httpd_query_key_value(buf, "val", value, sizeof(value)) == ESP_OK) {
-            } else {
-                free(buf);
-                httpd_resp_send_404(req);
-                return ESP_FAIL;
-            }
-        } else {
-            free(buf);
-            httpd_resp_send_404(req);
-            return ESP_FAIL;
-        }
-        free(buf);
-    } else {
-        httpd_resp_send_404(req);
-        return ESP_FAIL;
-    }
-
-    int val = atoi(value);
-    sensor_t * s = esp_camera_sensor_get();
-    int res = 0;
-
-    if(!strcmp(variable, "framesize")) {
-        if(s->pixformat == PIXFORMAT_JPEG) res = s->set_framesize(s, (framesize_t)val);
-    }
-    else if(!strcmp(variable, "quality")) res = s->set_quality(s, val);
-    else if(!strcmp(variable, "contrast")) res = s->set_contrast(s, val);
-    else if(!strcmp(variable, "brightness")) res = s->set_brightness(s, val);
-    else if(!strcmp(variable, "saturation")) res = s->set_saturation(s, val);
-    else if(!strcmp(variable, "gainceiling")) res = s->set_gainceiling(s, (gainceiling_t)val);
-    else if(!strcmp(variable, "colorbar")) res = s->set_colorbar(s, val);
-    else if(!strcmp(variable, "awb")) res = s->set_whitebal(s, val);
-    else if(!strcmp(variable, "agc")) res = s->set_gain_ctrl(s, val);
-    else if(!strcmp(variable, "aec")) res = s->set_exposure_ctrl(s, val);
-    else if(!strcmp(variable, "hmirror")) res = s->set_hmirror(s, val);
-    else if(!strcmp(variable, "vflip")) res = s->set_vflip(s, val);
-    else if(!strcmp(variable, "awb_gain")) res = s->set_awb_gain(s, val);
-    else if(!strcmp(variable, "agc_gain")) res = s->set_agc_gain(s, val);
-    else if(!strcmp(variable, "aec_value")) res = s->set_aec_value(s, val);
-    else if(!strcmp(variable, "aec2")) res = s->set_aec2(s, val);
-    else if(!strcmp(variable, "dcw")) res = s->set_dcw(s, val);
-    else if(!strcmp(variable, "bpc")) res = s->set_bpc(s, val);
-    else if(!strcmp(variable, "wpc")) res = s->set_wpc(s, val);
-    else if(!strcmp(variable, "raw_gma")) res = s->set_raw_gma(s, val);
-    else if(!strcmp(variable, "lenc")) res = s->set_lenc(s, val);
-    else if(!strcmp(variable, "special_effect")) res = s->set_special_effect(s, val);
-    else if(!strcmp(variable, "wb_mode")) res = s->set_wb_mode(s, val);
-    else if(!strcmp(variable, "ae_level")) res = s->set_ae_level(s, val);
-    else {
-        res = -1;
-    }
-
-    if(res){
-        return httpd_resp_send_500(req);
-    }
-
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-    return httpd_resp_send(req, NULL, 0);
-}
-
-static esp_err_t status_handler(httpd_req_t *req){
-    static char json_response[1024];
-
-    sensor_t * s = esp_camera_sensor_get();
-    char * p = json_response;
-    *p++ = '{';
-
-    p+=sprintf(p, "\"framesize\":%u,", s->status.framesize);
-    p+=sprintf(p, "\"quality\":%u,", s->status.quality);
-    p+=sprintf(p, "\"brightness\":%d,", s->status.brightness);
-    p+=sprintf(p, "\"contrast\":%d,", s->status.contrast);
-    p+=sprintf(p, "\"saturation\":%d,", s->status.saturation);
-    p+=sprintf(p, "\"special_effect\":%u,", s->status.special_effect);
-    p+=sprintf(p, "\"wb_mode\":%u,", s->status.wb_mode);
-    p+=sprintf(p, "\"awb\":%u,", s->status.awb);
-    p+=sprintf(p, "\"awb_gain\":%u,", s->status.awb_gain);
-    p+=sprintf(p, "\"aec\":%u,", s->status.aec);
-    p+=sprintf(p, "\"aec2\":%u,", s->status.aec2);
-    p+=sprintf(p, "\"ae_level\":%d,", s->status.ae_level);
-    p+=sprintf(p, "\"aec_value\":%u,", s->status.aec_value);
-    p+=sprintf(p, "\"agc\":%u,", s->status.agc);
-    p+=sprintf(p, "\"agc_gain\":%u,", s->status.agc_gain);
-    p+=sprintf(p, "\"gainceiling\":%u,", s->status.gainceiling);
-    p+=sprintf(p, "\"bpc\":%u,", s->status.bpc);
-    p+=sprintf(p, "\"wpc\":%u,", s->status.wpc);
-    p+=sprintf(p, "\"raw_gma\":%u,", s->status.raw_gma);
-    p+=sprintf(p, "\"lenc\":%u,", s->status.lenc);
-    p+=sprintf(p, "\"hmirror\":%u,", s->status.hmirror);
-    p+=sprintf(p, "\"dcw\":%u,", s->status.dcw);
-    p+=sprintf(p, "\"colorbar\":%u", s->status.colorbar);
-    *p++ = '}';
-    *p++ = 0;
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-    return httpd_resp_send(req, json_response, strlen(json_response));
-}
-
-static esp_err_t capture_handler(httpd_req_t *req){
-    camera_fb_t * fb = NULL;
+static esp_err_t capture_handler(httpd_req_t *req) {
+    camera_fb_t *fb = NULL;
     esp_err_t res = ESP_OK;
     int64_t fr_start = esp_timer_get_time();
 
     fb = esp_camera_fb_get();
     if (!fb) {
-        Serial.printf("Camera capture failed");
+        Serial.println("Camera capture failed");
         httpd_resp_send_500(req);
         return ESP_FAIL;
     }
@@ -291,16 +169,16 @@ static esp_err_t capture_handler(httpd_req_t *req){
     httpd_resp_set_hdr(req, "Content-Disposition", "inline; filename=capture.jpg");
 
     size_t fb_len = 0;
-    if(fb->format == PIXFORMAT_JPEG){
+    if (fb->format == PIXFORMAT_JPEG) {
         fb_len = fb->len;
         res = httpd_resp_send(req, (const char *)fb->buf, fb->len);
     } else {
         jpg_chunking_t jchunk = {req, 0};
-        res = frame2jpg_cb(fb, 80, jpg_encode_stream, &jchunk)?ESP_OK:ESP_FAIL;
+        res = frame2jpg_cb(fb, 80, jpg_encode_stream, &jchunk) ? ESP_OK : ESP_FAIL;
         httpd_resp_send_chunk(req, NULL, 0);
         fb_len = jchunk.len;
     }
-    
+
     // Save the captured frame to the global variable
     if (last_captured_fb) {
         esp_camera_fb_return(last_captured_fb);
@@ -309,7 +187,7 @@ static esp_err_t capture_handler(httpd_req_t *req){
     last_captured_fb = fb;
 
     int64_t fr_end = esp_timer_get_time();
-    Serial.printf("JPG: %uB %ums", (uint32_t)(fb_len), (uint32_t)((fr_end - fr_start)/1000));
+    Serial.printf("JPG: %uB %ums", (uint32_t)(fb_len), (uint32_t)((fr_end - fr_start) / 1000));
     return res;
 }
 
@@ -328,7 +206,6 @@ static void capture_image(void *arg) {
     }
     last_captured_fb = fb;
 }
-
 
 static esp_err_t index_handler(httpd_req_t *req) {
     httpd_resp_set_type(req, "text/html");
@@ -364,20 +241,6 @@ static esp_err_t index_handler(httpd_req_t *req) {
     return httpd_resp_send(req, &page[0], strlen(&page[0]));
 }
 
-static void start_periodic_capture_timer() {
-    const esp_timer_create_args_t periodic_timer_args = {
-        .callback = &capture_image,
-        .arg = NULL,
-        .dispatch_method = ESP_TIMER_TASK,
-        .name = "periodic_capture_timer"
-    };
-
-    esp_timer_create(&periodic_timer_args, &periodic_capture_timer);
-
-    // Set the timer to trigger every 1 second (1,000,000 microseconds)
-    esp_timer_start_periodic(periodic_capture_timer, 1000000);  // Change this line to 1000000 (1 second)
-}
-
 void startCameraServer() {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
 
@@ -385,20 +248,6 @@ void startCameraServer() {
         .uri       = "/",
         .method    = HTTP_GET,
         .handler   = index_handler,
-        .user_ctx  = NULL
-    };
-
-    httpd_uri_t status_uri = {
-        .uri       = "/status",
-        .method    = HTTP_GET,
-        .handler   = status_handler,
-        .user_ctx  = NULL
-    };
-
-    httpd_uri_t cmd_uri = {
-        .uri       = "/control",
-        .method    = HTTP_GET,
-        .handler   = cmd_handler,
         .user_ctx  = NULL
     };
 
@@ -422,12 +271,7 @@ void startCameraServer() {
     // Start the HTTP servers and register URI handlers
     if (httpd_start(&camera_httpd, &config) == ESP_OK) {
         httpd_register_uri_handler(camera_httpd, &index_uri);
-        httpd_register_uri_handler(camera_httpd, &status_uri);
-        httpd_register_uri_handler(camera_httpd, &cmd_uri);
         httpd_register_uri_handler(camera_httpd, &capture_uri);
-
-        // Start the periodic capture timer
-        start_periodic_capture_timer();
     }
     config.server_port += 1;
     config.ctrl_port += 1;
