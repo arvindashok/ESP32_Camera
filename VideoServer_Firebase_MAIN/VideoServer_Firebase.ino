@@ -8,11 +8,40 @@
 #include "img_converters.h"
 #include "camera_index.h"
 #include "Arduino.h"
+#include "driver/rtc_io.h"
+#include <LittleFS.h>
+#include <FS.h>
+#include <Firebase_ESP_Client.h>
+//Provide the token generation process info.
+#include <addons/TokenHelper.h>
 
 #define CAMERA_MODEL_AI_THINKER
 
 const char* ssid = "Vasko";   //Enter SSID WIFI Name
 const char* password = "arv2003!";   //Enter WIFI Password
+
+// Insert Firebase project API Key
+#define API_KEY "AIzaSyC0I-KPyRpX0SQhyx0fXn2Ql5tiZvuP3wg"
+
+// Insert Authorized Email and Corresponding Password
+#define USER_EMAIL "arvind.cs21@bmsce.ac.in"
+#define USER_PASSWORD "arv2003!"
+
+// Insert Firebase storage bucket ID e.g bucket-name.appspot.com
+#define STORAGE_BUCKET_ID "esp32-cam-7611b.appspot.com"
+
+// Photo File Name to save in LittleFS
+#define FILE_PHOTO_PATH "/photo.jpg"
+#define BUCKET_PHOTO "/data/photo.jpg"
+
+#define FIREBASE_PATH "data/image.jpg" 
+
+bool takeNewPhoto = false;
+
+//Define Firebase Data objects
+FirebaseData fbdo;
+FirebaseAuth auth;
+FirebaseConfig configF;
 
 #if defined(CAMERA_MODEL_WROVER_KIT)
 #define PWDN_GPIO_NUM    -1
@@ -62,6 +91,7 @@ extern String WiFiAddr;
 static camera_fb_t *last_captured_fb = NULL;
 
 static esp_err_t capture_handler(httpd_req_t *req);
+void uploadPhotoToFirebase();
 
 typedef struct {
         size_t size; //number of values used for filtering
@@ -84,7 +114,6 @@ static const char* _STREAM_PART = "Content-Type: image/jpeg\r\nContent-Length: %
 static ra_filter_t ra_filter;
 httpd_handle_t stream_httpd = NULL;
 httpd_handle_t camera_httpd = NULL;
-
 
 void startCameraServer();
 
@@ -147,6 +176,25 @@ void setup() {
   Serial.println("");
   Serial.println("WiFi connected");
 
+  // Initialize LittleFS
+  if (!LittleFS.begin(true)) {
+    Serial.println("An Error has occurred while mounting LittleFS");
+    ESP.restart();
+  }
+  else {
+    delay(500);
+    Serial.println("LittleFS mounted successfully");
+  }
+
+  //Firebase
+  configF.api_key = API_KEY;
+  //Assign the user sign in credentials
+  auth.user.email = USER_EMAIL;
+  auth.user.password = USER_PASSWORD;
+  //Assign the callback function for the long running token generation task
+  configF.token_status_callback = tokenStatusCallback; //see addons/TokenHelper.h
+  Firebase.begin(&configF, &auth);
+
   startCameraServer();
 
   Serial.print("Camera Ready! Use 'http://");
@@ -157,7 +205,11 @@ void setup() {
 
 void loop() {
   // put your main code here, to run repeatedly:
-
+  // Check if a new photo should be uploaded
+  if (takeNewPhoto) {
+     takeNewPhoto = false;
+    uploadPhotoToFirebase();
+  }
 }
 
 static ra_filter_t * ra_filter_init(ra_filter_t * filter, size_t sample_size){
@@ -286,6 +338,22 @@ static esp_err_t capture_handler(httpd_req_t *req) {
         return ESP_FAIL;
     }
 
+    // Save the captured frame to LittleFS
+    File file = LittleFS.open(FILE_PHOTO_PATH, FILE_WRITE);
+    if (file) {
+        file.write(fb->buf, fb->len);
+        file.close();
+        Serial.println("Photo saved to LittleFS");
+    } else {
+        Serial.println("Failed to open file in writing mode");
+        esp_camera_fb_return(fb);
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+
+    // Trigger Firebase upload (set takeNewPhoto to true)
+    takeNewPhoto = true;
+
     httpd_resp_set_type(req, "image/jpeg");
     httpd_resp_set_hdr(req, "Content-Disposition", "inline; filename=capture.jpg");
 
@@ -300,17 +368,52 @@ static esp_err_t capture_handler(httpd_req_t *req) {
         fb_len = jchunk.len;
     }
 
-    // Save the captured frame to the global variable
-    if (last_captured_fb) {
-        esp_camera_fb_return(last_captured_fb);
-        last_captured_fb = NULL;
-    }
-    last_captured_fb = fb;
+    esp_camera_fb_return(fb);
 
     int64_t fr_end = esp_timer_get_time();
     Serial.printf("JPG: %uB %ums", (uint32_t)(fb_len), (uint32_t)((fr_end - fr_start) / 1000));
+
     return res;
 }
+
+void uploadPhotoToFirebase() {
+    // Open the file for reading
+    File file = LittleFS.open(FILE_PHOTO_PATH, "r");
+    if (!file) {
+        Serial.println("Failed to open file for reading");
+        return;
+    }
+
+    // Get the size of the file
+    size_t fileSize = file.size();
+
+    // Allocate memory for the photo buffer
+    uint8_t *photoBuffer = (uint8_t *)malloc(fileSize);
+    if (!photoBuffer) {
+        Serial.println("Failed to allocate memory");
+        file.close();
+        return;
+    }
+
+    // Read the file into the photo buffer
+    file.read(photoBuffer, fileSize);
+    file.close();
+
+    // Construct the Firebase storage path
+    String firebasePath = String(FIREBASE_PATH) + "/" + WiFiAddr + ".jpg";
+
+    // Upload the photo to Firebase Storage
+    if (Firebase.Storage.upload(&fbdo, STORAGE_BUCKET_ID, FILE_PHOTO_PATH, mem_storage_type_flash, BUCKET_PHOTO, "image/jpeg")) {
+        Serial.println("Upload success");
+    } else {
+        Serial.println("Upload failed");
+        Serial.println("Error: " + fbdo.errorReason());
+    }
+
+    // Free the allocated memory
+    free(photoBuffer);
+}
+
 
 static esp_err_t index_handler(httpd_req_t *req) {
     httpd_resp_set_type(req, "text/html");
