@@ -35,7 +35,7 @@ const char* password = "arv2003!";   //Enter WIFI Password
 // Photo File Name to save in LittleFS
 #define FILE_PHOTO_PATH "/photo.jpg"
 #define BUCKET_PHOTO "/data/photo.jpg"
-
+#define SESNOR_DATA_PATH ""
 #define FIREBASE_PATH "data/image.jpg" 
 
 bool takeNewPhoto = false;
@@ -410,7 +410,7 @@ void uploadPhotoToFirebase(int pirState) {
     // Read the file into the photo buffer
     file.read(photoBuffer, fileSize);
     file.close();
-
+    
     // Construct the Firebase storage path
     String firebasePath = String(FIREBASE_PATH) + "/" + WiFiAddr + ".jpg";
 
@@ -438,7 +438,7 @@ void uploadPhotoToFirebase(int pirState) {
     metadataFile.close();
 
     // Upload metadata file to Firebase Storage
-    if (Firebase.Storage.upload(&fbdo, STORAGE_BUCKET_ID, metadataPath.c_str(), mem_storage_type_flash, BUCKET_PHOTO + metadataPath, "application/json")) {
+    if (Firebase.Storage.upload(&fbdo, STORAGE_BUCKET_ID, metadataPath.c_str(), mem_storage_type_flash, metadataPath, "application/json")) {
         Serial.println("Metadata upload success");
     } else {
         Serial.println("Metadata upload failed");
