@@ -14,6 +14,7 @@
 #include <Firebase_ESP_Client.h>
 //Provide the token generation process info.
 #include <addons/TokenHelper.h>
+#include <ArduinoJson.h>
 
 #define CAMERA_MODEL_AI_THINKER
 
@@ -411,11 +412,12 @@ void uploadPhotoToFirebase(int pirState) {
     file.read(photoBuffer, fileSize);
     file.close();
     
-    // Construct the Firebase storage path
-    String firebasePath = String(FIREBASE_PATH) + "/" + WiFiAddr + ".jpg";
+    // Construct a unique filename based on timestamp
+    String timestamp = String(millis());
+    String firebasePath = String(FIREBASE_PATH) + "/" + WiFiAddr + "_" + timestamp + ".jpg";
 
     // Upload the photo to Firebase Storage
-    if (Firebase.Storage.upload(&fbdo, STORAGE_BUCKET_ID, FILE_PHOTO_PATH, mem_storage_type_flash, BUCKET_PHOTO, "image/jpeg")) {
+    if (Firebase.Storage.upload(&fbdo, STORAGE_BUCKET_ID, FILE_PHOTO_PATH, mem_storage_type_flash, firebasePath.c_str(), "image/jpeg")) {
         Serial.println("Upload success");
     } else {
         Serial.println("Upload failed");
