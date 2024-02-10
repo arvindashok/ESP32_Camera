@@ -20,6 +20,8 @@
 const char* ssid = "Vasko";   //Enter SSID WIFI Name
 const char* password = "arv2003!";   //Enter WIFI Password
 
+#define PIR_PIN 13
+
 // Insert Firebase project API Key
 #define API_KEY "AIzaSyC0I-KPyRpX0SQhyx0fXn2Ql5tiZvuP3wg"
 
@@ -123,6 +125,8 @@ void setup() {
   Serial.println();
   // Turn-off the 'brownout detector'
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
+
+  pinMode(PIR_PIN, INPUT);
   
   camera_config_t config;
   config.ledc_channel = LEDC_CHANNEL_0;
@@ -206,6 +210,15 @@ void setup() {
 void loop() {
   // put your main code here, to run repeatedly:
   // Check if a new photo should be uploaded
+
+  int pirState = digitalRead(PIR_PIN);
+
+  // if (pirState == HIGH) {
+  //   Serial.println("Motion detected!");
+  // }
+  Serial.println(pirState);
+  delay(2000);
+
   if (takeNewPhoto) {
      takeNewPhoto = false;
     uploadPhotoToFirebase();
