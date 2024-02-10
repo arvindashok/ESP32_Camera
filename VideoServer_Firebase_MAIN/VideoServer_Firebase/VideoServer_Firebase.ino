@@ -93,7 +93,7 @@ extern String WiFiAddr;
 static camera_fb_t *last_captured_fb = NULL;
 
 static esp_err_t capture_handler(httpd_req_t *req);
-void uploadPhotoToFirebase();
+void uploadPhotoToFirebase(int pirState);
 
 typedef struct {
         size_t size; //number of values used for filtering
@@ -208,20 +208,19 @@ void setup() {
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-  // Check if a new photo should be uploaded
-
   int pirState = digitalRead(PIR_PIN);
 
-  // if (pirState == HIGH) {
-  //   Serial.println("Motion detected!");
-  // }
   Serial.println(pirState);
   delay(2000);
 
+  if (pirState == HIGH) {
+    Serial.println("Motion detected!");
+    capture_handler(NULL); // Pass NULL as the request parameter
+  }
+
   if (takeNewPhoto) {
-     takeNewPhoto = false;
-    uploadPhotoToFirebase();
+    takeNewPhoto = false;
+    uploadPhotoToFirebase(pirState);
   }
 }
 
@@ -389,7 +388,7 @@ static esp_err_t capture_handler(httpd_req_t *req) {
     return res;
 }
 
-void uploadPhotoToFirebase() {
+void uploadPhotoToFirebase(int pirState) {
     // Open the file for reading
     File file = LittleFS.open(FILE_PHOTO_PATH, "r");
     if (!file) {
@@ -423,10 +422,32 @@ void uploadPhotoToFirebase() {
         Serial.println("Error: " + fbdo.errorReason());
     }
 
+    // Create metadata JSON object
+    FirebaseJson json;
+    json.add("motion_detected", pirState);
+
+    // Save metadata JSON to LittleFS
+    String metadataPath = "/metadata.json";  // Assuming metadata file will be saved in root directory
+    File metadataFile = LittleFS.open(metadataPath, "w");
+    if (!metadataFile) {
+        Serial.println("Failed to create metadata file");
+        free(photoBuffer);
+        return;
+    }
+    json.toString(metadataFile);
+    metadataFile.close();
+
+    // Upload metadata file to Firebase Storage
+    if (Firebase.Storage.upload(&fbdo, STORAGE_BUCKET_ID, metadataPath.c_str(), mem_storage_type_flash, BUCKET_PHOTO + metadataPath, "application/json")) {
+        Serial.println("Metadata upload success");
+    } else {
+        Serial.println("Metadata upload failed");
+        Serial.println("Error: " + fbdo.errorReason());
+    }
+
     // Free the allocated memory
     free(photoBuffer);
 }
-
 
 static esp_err_t index_handler(httpd_req_t *req) {
     httpd_resp_set_type(req, "text/html");
