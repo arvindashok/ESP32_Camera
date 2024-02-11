@@ -14,7 +14,6 @@
 #include <Firebase_ESP_Client.h>
 //Provide the token generation process info.
 #include <addons/TokenHelper.h>
-#include <ArduinoJson.h>
 #include <HTTPClient.h>
 
 #define CAMERA_MODEL_AI_THINKER
@@ -47,7 +46,6 @@ bool takeNewPhoto = false;
 FirebaseData fbdo;
 FirebaseAuth auth;
 FirebaseConfig configF;
-
 
 #if defined(CAMERA_MODEL_WROVER_KIT)
 #define PWDN_GPIO_NUM    -1
@@ -224,7 +222,7 @@ void loop() {
         capture_handler(NULL); // Pass NULL as the request parameter
     }
     if (readFromRTDB()){
-      println ("Node1 detected motion");
+      Serial.println ("Node1 detected motion");
       //Do something
     }
 
@@ -464,69 +462,8 @@ void uploadPhotoToFirebase(int pirState) {
         Serial.println("Error: " + fbdo.errorReason());
     }
 
-    // Create metadata JSON object
-    FirebaseJson json;
-    json.add("motion_detected", pirState);
-
-    // Save metadata JSON to LittleFS
-    String metadataPath = "/metadata.json";  // Assuming metadata file will be saved in root directory
-    File metadataFile = LittleFS.open(metadataPath, "w");
-    if (!metadataFile) {
-        Serial.println("Failed to create metadata file");
-        free(photoBuffer);
-        return;
-    }
-    json.toString(metadataFile);
-    metadataFile.close();
-
-    // Upload metadata file to Firebase Storage
-    if (Firebase.Storage.upload(&fbdo, STORAGE_BUCKET_ID, metadataPath.c_str(), mem_storage_type_flash, metadataPath, "application/json")) {
-        Serial.println("Metadata upload success");
-    } else {
-        Serial.println("Metadata upload failed");
-        Serial.println("Error: " + fbdo.errorReason());
-    }
-
     // Free the allocated memory
     free(photoBuffer);
-}
-
-void readMetadataFromFirebase() {
-    HTTPClient http;
-
-    // Construct the URL to download the metadata file
-    String url = "https://firebasestorage.googleapis.com/v0/b/";
-    url += STORAGE_BUCKET_ID;
-    url += "/o/metadata.json";
-
-    // Start the HTTPClient and send a GET request to download the file
-    http.begin(url);
-
-    // Wait for the response and check if the request was successful
-    int httpCode = http.GET();
-    if (httpCode == HTTP_CODE_OK) {
-        // Parse the JSON content
-        DynamicJsonDocument doc(1024);
-        DeserializationError error = deserializeJson(doc, http.getString());
-        if (!error) {
-            // Get the value of motion_detected
-            int motionDetected = doc["motion_detected"].as<int>();
-            if (motionDetected == 1) {
-                Serial.println("Motion detected in metadata");
-                // Do something when motion is detected
-            } else {
-                Serial.println("No motion detected in metadata");
-                // Do something when no motion is detected
-            }
-        } else {
-            Serial.println("Failed to parse JSON");
-        }
-    } else {
-        Serial.println("Failed to download metadata");
-    }
-
-    // End the HTTPClient
-    http.end();
 }
 
 static esp_err_t index_handler(httpd_req_t *req) {

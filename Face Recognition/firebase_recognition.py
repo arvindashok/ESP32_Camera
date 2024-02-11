@@ -41,7 +41,7 @@ known_faces = load_images_and_encodings(known_faces_directory)
 
 # Download unknown image from Firebase Storage
 bucket = storage.bucket()
-blob = bucket.blob('data/photo.jpg')  # Replace with the path to your image in Firebase Storage
+blob = bucket.blob('data/image.jpg/192.168.0.102_62460.jpg')  # Replace with the path to your image in Firebase Storage
 temp_image = tempfile.NamedTemporaryFile(delete=False)
 
 blob.download_to_filename(temp_image.name)
