@@ -15,6 +15,7 @@
 //Provide the token generation process info.
 #include <addons/TokenHelper.h>
 #include <ArduinoJson.h>
+#include <HTTPClient.h>
 
 #define CAMERA_MODEL_AI_THINKER
 
@@ -32,6 +33,7 @@ const char* password = "arv2003!";   //Enter WIFI Password
 
 // Insert Firebase storage bucket ID e.g bucket-name.appspot.com
 #define STORAGE_BUCKET_ID "esp32-cam-7611b.appspot.com"
+#define DATABASE_URL "https://esp32-cam-7611b-default-rtdb.firebaseio.com"
 
 // Photo File Name to save in LittleFS
 #define FILE_PHOTO_PATH "/photo.jpg"
@@ -45,6 +47,7 @@ bool takeNewPhoto = false;
 FirebaseData fbdo;
 FirebaseAuth auth;
 FirebaseConfig configF;
+
 
 #if defined(CAMERA_MODEL_WROVER_KIT)
 #define PWDN_GPIO_NUM    -1
@@ -196,6 +199,8 @@ void setup() {
   //Assign the user sign in credentials
   auth.user.email = USER_EMAIL;
   auth.user.password = USER_PASSWORD;
+
+  configF.database_url = DATABASE_URL;
   //Assign the callback function for the long running token generation task
   configF.token_status_callback = tokenStatusCallback; //see addons/TokenHelper.h
   Firebase.begin(&configF, &auth);
@@ -209,31 +214,39 @@ void setup() {
 }
 
 void loop() {
-  int pirState = digitalRead(PIR_PIN);
+    int pirState = digitalRead(PIR_PIN);
 
-  Serial.println(pirState);
-  delay(2000);
+    Serial.println(pirState);
+    firebaseRTDB(pirState);
+    delay(2000);
+    if (pirState == HIGH) {
+        Serial.println("Motion detected!");
+        capture_handler(NULL); // Pass NULL as the request parameter
+    }
+    if (takeNewPhoto) {
+        takeNewPhoto = false;
+        uploadPhotoToFirebase(pirState);
+    }
+    readMetadataFromFirebase(); // Check metadata from Firebase Storage
+}
 
-  if (pirState == HIGH) {
-    Serial.println("Motion detected!");
-    capture_handler(NULL); // Pass NULL as the request parameter
-  }
-
-  if (takeNewPhoto) {
-    takeNewPhoto = false;
-    uploadPhotoToFirebase(pirState);
-  }
+void firebaseRTDB(int val){
+    if (Firebase.RTDB.setInt(&fbdo, "test/int", val)){
+      Serial.println("Sensor data uploaded...");
+    }
+    else{
+      Serial.println("RTDB FAILED");
+      Serial.println("REASON: " + fbdo.errorReason());
+    }
 }
 
 static ra_filter_t * ra_filter_init(ra_filter_t * filter, size_t sample_size){
     memset(filter, 0, sizeof(ra_filter_t));
-
     filter->values = (int *)malloc(sample_size * sizeof(int));
     if(!filter->values){
         return NULL;
     }
     memset(filter->values, 0, sample_size * sizeof(int));
-
     filter->size = sample_size;
     return filter;
 }
@@ -281,7 +294,6 @@ static esp_err_t stream_handler(httpd_req_t *req){
     if(res != ESP_OK){
         return res;
     }
-
     while(true){
         fb = esp_camera_fb_get();
         if (!fb) {
@@ -334,7 +346,6 @@ static esp_err_t stream_handler(httpd_req_t *req){
             avg_frame_time, 1000.0 / avg_frame_time
         );
     }
-
     last_frame = 0;
     return res;
 }
@@ -449,6 +460,44 @@ void uploadPhotoToFirebase(int pirState) {
 
     // Free the allocated memory
     free(photoBuffer);
+}
+
+void readMetadataFromFirebase() {
+    HTTPClient http;
+
+    // Construct the URL to download the metadata file
+    String url = "https://firebasestorage.googleapis.com/v0/b/";
+    url += STORAGE_BUCKET_ID;
+    url += "/o/metadata.json";
+
+    // Start the HTTPClient and send a GET request to download the file
+    http.begin(url);
+
+    // Wait for the response and check if the request was successful
+    int httpCode = http.GET();
+    if (httpCode == HTTP_CODE_OK) {
+        // Parse the JSON content
+        DynamicJsonDocument doc(1024);
+        DeserializationError error = deserializeJson(doc, http.getString());
+        if (!error) {
+            // Get the value of motion_detected
+            int motionDetected = doc["motion_detected"].as<int>();
+            if (motionDetected == 1) {
+                Serial.println("Motion detected in metadata");
+                // Do something when motion is detected
+            } else {
+                Serial.println("No motion detected in metadata");
+                // Do something when no motion is detected
+            }
+        } else {
+            Serial.println("Failed to parse JSON");
+        }
+    } else {
+        Serial.println("Failed to download metadata");
+    }
+
+    // End the HTTPClient
+    http.end();
 }
 
 static esp_err_t index_handler(httpd_req_t *req) {
