@@ -216,28 +216,57 @@ void setup() {
 void loop() {
     int pirState = digitalRead(PIR_PIN);
 
-    Serial.println(pirState);
+    //Serial.println(pirState);
     firebaseRTDB(pirState);
     delay(2000);
     if (pirState == HIGH) {
         Serial.println("Motion detected!");
         capture_handler(NULL); // Pass NULL as the request parameter
     }
+    if (readFromRTDB()){
+      println ("Node1 detected motion");
+      //Do something
+    }
+
     if (takeNewPhoto) {
         takeNewPhoto = false;
         uploadPhotoToFirebase(pirState);
     }
-    readMetadataFromFirebase(); // Check metadata from Firebase Storage
 }
 
 void firebaseRTDB(int val){
-    if (Firebase.RTDB.setInt(&fbdo, "test/int", val)){
+    if (Firebase.RTDB.setInt(&fbdo, "Node1/int", val)){
       Serial.println("Sensor data uploaded...");
     }
     else{
       Serial.println("RTDB FAILED");
       Serial.println("REASON: " + fbdo.errorReason());
     }
+}
+
+int readFromRTDB() {
+  // Specify the path in the RTDB from which you want to read the value
+  String path = "Node1/int";
+
+  // Read the value from the specified path
+  if (Firebase.RTDB.getInt(&fbdo, path)) {
+    // Check if the read operation was successful
+    if (fbdo.dataType() == "int") {
+      // If the data type is integer, retrieve the value
+      int value = fbdo.intData();
+      Serial.print("Value read from Firebase RTDB: ");
+      Serial.println(value);
+      return value;
+    } else {
+      // If the data type is not integer, print an error message
+      Serial.println("Error: Unexpected data type");
+    }
+  } else {
+    // If the read operation failed, print an error message
+    Serial.println("Error reading from Firebase RTDB");
+    Serial.println("Reason: " + fbdo.errorReason());
+  }
+  return 0;
 }
 
 static ra_filter_t * ra_filter_init(ra_filter_t * filter, size_t sample_size){
