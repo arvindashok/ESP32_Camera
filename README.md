@@ -1,8 +1,8 @@
 <h1>Security surveillance system using ESP32 Cam</h1>
 
-This smart surviellance system provides motion detection based surviellance which uses the ESP32 microscontroller to stream live video footage and perform face recognition on captured images. This software system can be extended to work with multiple camera nodes. 
+This smart surviellance system provides motion detection based surviellance which uses the ESP32 microscontrollers to stream live video footage and perform face recognition on captured images. This software system can be extended to work with multiple camera nodes. 
 
-The main objective of this project is to enhance protection and security and to minimize human interference.
+The main objective of this project is to enhance protection and security and minimize human interference by providing motion based tracking.
 
 <h4>Hardware Components:</h4>
 The ESP32-CAM is a small size, low power consumption camera module based on ESP32. It comes with an OV2640 camera and provides onboard TF card slot. The ESP32-CAM can be widely used in intelligent IoT applications such as wireless video monitoring, WiFi image upload, QR identification, and so on. It is easy to program and comes in built with a wifi and bluetooth module.
