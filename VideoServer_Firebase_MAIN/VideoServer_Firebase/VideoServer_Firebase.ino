@@ -18,21 +18,21 @@
 
 #define CAMERA_MODEL_AI_THINKER
 
-const char* ssid = "Vasko";   //Enter SSID WIFI Name
-const char* password = "arv2003!";   //Enter WIFI Password
+const char* ssid = "";   //Enter SSID WIFI Name
+const char* password = "";   //Enter WIFI Password
 
 #define PIR_PIN 13
 
 // Insert Firebase project API Key
-#define API_KEY "AIzaSyC0I-KPyRpX0SQhyx0fXn2Ql5tiZvuP3wg"
+#define API_KEY ""
 
 // Insert Authorized Email and Corresponding Password
-#define USER_EMAIL "arvind.cs21@bmsce.ac.in"
-#define USER_PASSWORD "arv2003!"
+#define USER_EMAIL ""
+#define USER_PASSWORD ""
 
 // Insert Firebase storage bucket ID e.g bucket-name.appspot.com
-#define STORAGE_BUCKET_ID "esp32-cam-7611b.appspot.com"
-#define DATABASE_URL "https://esp32-cam-7611b-default-rtdb.firebaseio.com"
+#define STORAGE_BUCKET_ID ""
+#define DATABASE_URL ""
 
 // Photo File Name to save in LittleFS
 #define FILE_PHOTO_PATH "/photo.jpg"
