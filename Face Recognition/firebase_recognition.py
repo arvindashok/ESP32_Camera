@@ -7,7 +7,7 @@ import tempfile
 
 # Initialize Firebase Admin SDK
 cred = credentials.Certificate("firebase_admin.json")  # Replace with your service account key
-firebase_admin.initialize_app(cred, {'storageBucket': 'esp32-cam-7611b.appspot.com'})
+firebase_admin.initialize_app(cred, {'storageBucket': ''})
 
 # Function to load all images from a directory and encode faces
 def load_images_and_encodings(directory):
