@@ -1,6 +1,6 @@
 <h1>Security surveillance system using ESP32 Cam</h1>
 
-This smart surviellance system provides motion detection based surviellance which uses the ESP32 microscontrollers to stream live video footage and perform face recognition on captured images. This software system can be extended to work with multiple camera nodes. 
+This smart surviellance system provides motion detection based surviellance which uses the ESP32 microcontrollers to stream live video footage and perform face recognition on captured images. This software system can be extended to work with multiple camera nodes. 
 
 The main objective of this project is to enhance protection and security and minimize human interference by providing motion based tracking.
 
