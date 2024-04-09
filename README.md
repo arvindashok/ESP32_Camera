@@ -1,21 +1,56 @@
-<h1>Security surveillance system using ESP32 Cam</h1>
+# Smart Surveillance System with Motion Detection and Face Recognition
 
-This smart surviellance system provides motion detection based surviellance which uses the ESP32 microcontrollers to stream live video footage and perform face recognition on captured images. This software system can be extended to work with multiple camera nodes. 
+This project implements a smart surveillance system utilizing motion detection technology and face recognition capabilities. It utilizes ESP32 microcontrollers along with a camera module to capture live video footage, detect motion, and recognize faces. The system can be extended to support multiple camera nodes for comprehensive surveillance coverage.
 
-The main objective of this project is to enhance protection and security and minimize human interference by providing motion based tracking.
+## Objective
 
-<h4>Hardware Components:</h4>
-The ESP32-CAM is a small size, low power consumption camera module based on ESP32. It comes with an OV2640 camera and provides onboard TF card slot. The ESP32-CAM can be widely used in intelligent IoT applications such as wireless video monitoring, WiFi image upload, QR identification, and so on. It is easy to program and comes in built with a wifi and bluetooth module.
-Passive Infrared (PIR) sensors are employed to detect motion within their field of view.
+The primary objective of this project is to enhance security and minimize human intervention by employing motion-based tracking and face recognition techniques.
 
-<h4>System Operation:</h4>
-PIR sensors continuously monitor their surroundings for changes in infrared radiation, indicating motion.
-When motion is detected, PIR sensors send signals to the associated ESP32 microcontroller.
-The ESP32 microcontroller processes the signal and triggers the connected camera module to capture images. The sensor data is also uploaded to Firebase, this allows other ESP32 microcontrollers in idle mode to monitor this sensor data in Firebase to detect this motion and start capturing footage.
-Captured images are then transmitted to a central database for storage and analysis. 
-Each individual node also activates and start capturing footage if it detects motion.
+## Features
 
-A simple face recognition script fetches images from the database to identify faces in the image.
-This code currently supports 2 nodes, each with an ESP32 Cam and PIR. It can be further extended to work with multiple nodes. 
+- **Motion Detection**: Passive Infrared (PIR) sensors continuously monitor the surroundings for changes in infrared radiation, indicating motion.
+- **Face Recognition**: Captured images are processed using a face recognition script to identify faces.
+- **Live Video Streaming**: Access live video feeds via LAN web servers hosted on each ESP32 device.
+- **Cloud Integration**: Utilize Firebase for cloud storage of captured images and real-time database for sensor data.
+- **Inter-node connection**: Uses sensor data on firebase to trigger actions on other cameras.
 
-Live video feed can be viewed on a LAN web server hosted on each ESP32. Captured images are stored in Firebase Storage. Sensor data of each node is stored using the Real Time Databse in Firebase
+## Hardware Components
+
+- **ESP32-CAM**: A compact camera module based on the ESP32 microcontroller, featuring an OV2640 camera and onboard TF card slot.
+- **Passive Infrared (PIR) Sensors**: Detect motion within their field of view by monitoring changes in infrared radiation.
+
+## System Operation
+
+1. **Motion Detection**: PIR sensors detect motion and trigger the ESP32 microcontroller to capture images.
+2. **Image Processing**: Captured images are stored locally and uploaded to Firebase Storage for cloud storage.
+3. **Face Recognition**: A face recognition script analyzes images to identify faces.
+4. **Data Monitoring**: Sensor data is uploaded to Firebase Realtime Database for monitoring and analysis.
+
+## Usage
+
+1. **Setup**: Connect the ESP32-CAM module to the WiFi network and configure Firebase credentials.
+2. **Operation**: The system will continuously monitor for motion. Upon detection, images are captured, processed, and uploaded to Firebase.
+
+## Code
+
+The code consists of several files:
+
+- **Main Code (main.cpp)**: Implements the core functionality of the surveillance system, including motion detection, image capture, and Firebase integration.
+- **Camera Configuration (camera_index.h)**: Defines the camera configuration parameters.
+- **Firebase Integration (Firebase_ESP_Client.h)**: Handles communication with the Firebase backend.
+- **HTTP Server (esp_http_server.h)**: Manages HTTP server functionality for streaming video and handling requests.
+
+## Setup Instructions
+
+1. Connect the ESP32-CAM module to the appropriate pins and upload the provided code.
+2. Configure WiFi credentials and Firebase API keys, email, and password.
+3. Mount LittleFS and ensure proper camera initialization.
+4. Start the camera server to begin surveillance operations.
+
+## Contributors
+
+- Arvind Ashok
+- Aryan Madhan Pillai
+- Aravind Anand
+
+
